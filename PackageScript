@@ -18,11 +18,11 @@ plugin_root = os.path.join(addons_root, 'namebanner')
 bin_path = os.path.join(plugin_root, 'bin', platform_folder)
 metamod_path = os.path.join(addons_root, 'metamod')
 gamedata_path = os.path.join(plugin_root, 'gamedata')
-cfg_root = os.path.join('game', 'csgo', 'cfg')
+configs_path = os.path.join(addons_root, 'configs', 'NameBanner')
 builder.AddFolder(bin_path)
 builder.AddFolder(metamod_path)
 gamedata_folder = builder.AddFolder(gamedata_path)
-cfg_folder = builder.AddFolder(cfg_root)
+configs_folder = builder.AddFolder(configs_path)
 
 task = MMSPlugin.binaries[0]
 extension = os.path.splitext(os.path.basename(task.binary.path))[1]
@@ -32,8 +32,8 @@ builder.AddCopy(
   gamedata_folder
 )
 builder.AddCopy(
-  os.path.join(builder.sourcePath, 'cfg', 'namebanner.cfg'),
-  cfg_folder
+  os.path.join(builder.sourcePath, 'configs', 'NameBanner', 'settings.ini'),
+  configs_folder
 )
 
 vdf = '''"Metamod Plugin"

@@ -1,12 +1,56 @@
 #pragma once
 
 #include "common.h"
-#include "detection/namechanger.h"
 #include "version_gen.h"
+#include "include/admin.h"
+#include "sdk/entity/cbaseplayercontroller.h"
+#include "sdk/serversideclient.h"
 
 #include <array>
+#include <chrono>
 #include <cstddef>
+#include <deque>
 #include <string>
+
+// The controller entity index is the player slot plus one.
+class Player
+{
+public:
+	explicit Player(i32 i) : index(i) {}
+
+	CBasePlayerController *GetController();
+
+	CPlayerSlot GetPlayerSlot() const
+	{
+		return index - 1;
+	}
+
+	CServerSideClient *GetClient();
+
+	bool IsInGame();
+	bool IsFakeClient();
+	bool IsCSTV();
+
+	const char *GetName();
+	u64 GetSteamId64();
+
+	const i32 index;
+
+private:
+	CUtlString sanitizedName;
+};
+
+extern Player *g_players[MAXPLAYERS + 1];
+Player *PlayerFromSlot(CPlayerSlot slot);
+
+using Clock = std::chrono::steady_clock;
+
+struct NameChangerPlayerData
+{
+	std::string lastName;
+	std::deque<Clock::time_point> changes;
+	bool initialized {};
+};
 
 class NameBannerPlugin final : public ISmmPlugin, public IMetamodListener
 {
@@ -64,7 +108,6 @@ public:
 	void OnClientFullyConnect(CPlayerSlot slot);
 	void OnClientSettingsChanged(CPlayerSlot slot);
 	void OnClientDisconnect(CPlayerSlot slot);
-	void BanForNameChanging(Player *player, std::size_t changes);
 
 	bool IsLoaded() const
 	{
@@ -74,13 +117,20 @@ public:
 private:
 	bool Activate(char *error, size_t maxlen, bool late);
 	void CleanupRuntime();
+	void LoadConfig();
+	void BanForNameChanging(Player *player, std::size_t changes);
 
 	bool loaded {};
 	bool activationPending {};
-	bool convarsRegistered {};
 	std::string activationError;
-	detection::NameChangerModule nameChanger;
+	std::array<NameChangerPlayerData, MAXPLAYERS + 1> playerData;
 	std::array<bool, MAXPLAYERS + 1> alreadyBanned {};
+
+	// Config (configs/NameBanner/settings.ini).
+	int threshold {5};
+	float windowSeconds {60.0f};
+	int banMinutes {0};
+	std::string banReason {"Changed name too many times in under a minute"};
 };
 
 extern NameBannerPlugin g_NameBanner;

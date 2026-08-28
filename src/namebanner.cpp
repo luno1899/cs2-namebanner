@@ -1,19 +1,33 @@
 #include "namebanner.h"
 
-#include "settings.h"
-#include "utils/hooks.h"
 #include "utils/interfaces.h"
 #include "utils/utils.h"
-#include "player/player.h"
 
-#include "eiface.h"
+#include "iserver.h"
+#include "KeyValues.h"
 
 NameBannerPlugin g_NameBanner;
 
 PLUGIN_EXPOSE(NameBannerPlugin, g_NameBanner);
 
+Player *g_players[MAXPLAYERS + 1] {};
+
 namespace
 {
+	IAdminApi *g_pAdmin {};
+
+	void CreatePlayers()
+	{
+		if (g_players[0])
+		{
+			return;
+		}
+		for (i32 i = 0; i <= MAXPLAYERS; ++i)
+		{
+			g_players[i] = new Player(i);
+		}
+	}
+
 	void ReplaceAll(std::string &value, const std::string &placeholder, const std::string &replacement)
 	{
 		for (size_t position = 0; (position = value.find(placeholder, position)) != std::string::npos; position += replacement.size())
@@ -22,9 +36,10 @@ namespace
 		}
 	}
 
-	void BanCallback(Player *player, std::size_t changes)
+	bool IsEligibleHuman(Player *player)
 	{
-		g_NameBanner.BanForNameChanging(player, changes);
+		return player && player->index >= 1 && player->index <= MAXPLAYERS && player->GetController() && !player->IsFakeClient()
+			   && !player->IsCSTV();
 	}
 
 	std::string JoinReasons(const std::vector<std::string> &reasons)
@@ -42,10 +57,156 @@ namespace
 	}
 } // namespace
 
+// -- Player ------------------------------------------------------------
+
+CBasePlayerController *Player::GetController()
+{
+	if (!GameEntitySystem())
+	{
+		return nullptr;
+	}
+	auto *entity = static_cast<CBaseEntity *>(GameEntitySystem()->GetEntityInstance(CEntityIndex(index)));
+	return entity && entity->IsController() ? static_cast<CBasePlayerController *>(entity) : nullptr;
+}
+
+CServerSideClient *Player::GetClient()
+{
+	return g_pNBUtils ? g_pNBUtils->GetClientBySlot(GetPlayerSlot()) : nullptr;
+}
+
+bool Player::IsInGame()
+{
+	auto *client = GetClient();
+	return client && client->IsInGame();
+}
+
+bool Player::IsFakeClient()
+{
+	auto *client = GetClient();
+	return client && client->IsFakeClient();
+}
+
+bool Player::IsCSTV()
+{
+	auto *client = GetClient();
+	return client && client->IsHLTV();
+}
+
+const char *Player::GetName()
+{
+	auto *client = GetClient();
+	sanitizedName = client ? client->GetClientName() : "<unknown>";
+	sanitizedName.Trim();
+	return sanitizedName.Get();
+}
+
+u64 Player::GetSteamId64()
+{
+	auto *client = GetClient();
+	if (client)
+	{
+		return client->GetClientSteamID().ConvertToUint64();
+	}
+	auto *controller = GetController();
+	return controller ? controller->m_steamID() : 0;
+}
+
+Player *PlayerFromSlot(CPlayerSlot slot)
+{
+	const i32 index = slot.Get() + 1;
+	return index >= 1 && index <= MAXPLAYERS ? g_players[index] : nullptr;
+}
+
+// -- Client lifecycle hooks ----------------------------------------------
+
+SH_DECL_HOOK1_void(ISource2GameClients, ClientFullyConnect, SH_NOATTRIB, false, CPlayerSlot);
+SH_DECL_HOOK1_void(ISource2GameClients, ClientSettingsChanged, SH_NOATTRIB, false, CPlayerSlot);
+SH_DECL_HOOK5_void(ISource2GameClients, ClientDisconnect, SH_NOATTRIB, false, CPlayerSlot, ENetworkDisconnectionReason, const char *, uint64,
+				   const char *);
+
+namespace
+{
+	struct HookEntry
+	{
+		int id;
+		const char *name;
+	};
+
+	CUtlVector<HookEntry> hookIds;
+
+	void HookClientFullyConnect(CPlayerSlot slot)
+	{
+		if (g_NameBanner.IsLoaded())
+		{
+			g_NameBanner.OnClientFullyConnect(slot);
+		}
+		RETURN_META(MRES_IGNORED);
+	}
+
+	void HookClientSettingsChanged(CPlayerSlot slot)
+	{
+		if (g_NameBanner.IsLoaded())
+		{
+			g_NameBanner.OnClientSettingsChanged(slot);
+		}
+		RETURN_META(MRES_IGNORED);
+	}
+
+	void HookClientDisconnect(CPlayerSlot slot, ENetworkDisconnectionReason, const char *, uint64, const char *)
+	{
+		if (g_NameBanner.IsLoaded())
+		{
+			g_NameBanner.OnClientDisconnect(slot);
+		}
+		RETURN_META(MRES_IGNORED);
+	}
+
+	bool InitializeHooks(std::vector<std::string> &missing)
+	{
+		auto add = [&](int id, const char *name)
+		{
+			if (id)
+			{
+				hookIds.AddToTail({id, name});
+			}
+			else
+			{
+				missing.emplace_back(std::string("The ") + name + " server hook could not be started.");
+			}
+		};
+		add(SH_ADD_HOOK(ISource2GameClients, ClientFullyConnect, g_pSource2GameClients, SH_STATIC(HookClientFullyConnect), true),
+			"fully connected player");
+		add(SH_ADD_HOOK(ISource2GameClients, ClientSettingsChanged, g_pSource2GameClients, SH_STATIC(HookClientSettingsChanged), true),
+			"player setting update");
+		add(SH_ADD_HOOK(ISource2GameClients, ClientDisconnect, g_pSource2GameClients, SH_STATIC(HookClientDisconnect), true),
+			"disconnecting player");
+		return missing.empty();
+	}
+
+	bool CleanupHooks()
+	{
+		bool removed = true;
+		for (int i = hookIds.Count() - 1; i >= 0; --i)
+		{
+			if (SH_REMOVE_HOOK_ID(hookIds[i].id))
+			{
+				hookIds.Remove(i);
+			}
+			else
+			{
+				Warning("[NameBanner] The %s hook could not be removed yet. Metamod will try again during unload.\n", hookIds[i].name);
+				removed = false;
+			}
+		}
+		return removed;
+	}
+} // namespace
+
+// -- Plugin ----------------------------------------------------------------
+
 bool NameBannerPlugin::Load(PluginId id, ISmmAPI *ismm, char *error, size_t maxlen, bool late)
 {
 	PLUGIN_SAVEVARS();
-	settings::Initialize();
 	if (late)
 	{
 		if (!Activate(error, maxlen, true))
@@ -123,6 +284,13 @@ bool NameBannerPlugin::Activate(char *error, size_t maxlen, bool late)
 		}
 	}
 
+	int ret = 0;
+	g_pAdmin = static_cast<IAdminApi *>(g_SMAPI->MetaFactory(Admin_INTERFACE, &ret, nullptr));
+	if (ret == META_IFACE_FAILED || !g_pAdmin)
+	{
+		missing.emplace_back("The Admin System plugin (Pisex/cs2-admin_system) is not loaded, so bans have nowhere to go.");
+	}
+
 	if (!missing.empty())
 	{
 		if (error && maxlen)
@@ -137,15 +305,12 @@ bool NameBannerPlugin::Activate(char *error, size_t maxlen, bool late)
 		return false;
 	}
 
-	ConVar_Register();
-	convarsRegistered = true;
-	nameChanger.Load(BanCallback);
-	if (interfaces::pEngine)
-	{
-		interfaces::pEngine->ServerCommand("exec namebanner.cfg\n");
-	}
+	CreatePlayers();
+	LoadConfig();
+	playerData = {};
+	alreadyBanned = {};
 
-	if (!hooks::Initialize(missing))
+	if (!InitializeHooks(missing))
 	{
 		if (error && maxlen)
 		{
@@ -160,12 +325,11 @@ bool NameBannerPlugin::Activate(char *error, size_t maxlen, bool late)
 	}
 
 	loaded = true;
-	alreadyBanned = {};
 	if (late)
 	{
 		for (i32 i = 1; i <= MAXPLAYERS; ++i)
 		{
-			auto *player = g_pPlayerManager->players[i];
+			auto *player = g_players[i];
 			if (player && player->IsInGame())
 			{
 				OnClientFullyConnect(player->GetPlayerSlot());
@@ -176,22 +340,30 @@ bool NameBannerPlugin::Activate(char *error, size_t maxlen, bool late)
 	return true;
 }
 
+void NameBannerPlugin::LoadConfig()
+{
+	KeyValues::AutoDelete kv("NameBanner");
+	if (!g_pFullFileSystem || !kv->LoadFromFile(g_pFullFileSystem, "addons/configs/NameBanner/settings.ini"))
+	{
+		Msg("[NameBanner] No configs/NameBanner/settings.ini found, using defaults.\n");
+		return;
+	}
+	threshold = kv->GetInt("threshold", threshold);
+	windowSeconds = kv->GetFloat("window_seconds", windowSeconds);
+	banMinutes = kv->GetInt("ban_minutes", banMinutes);
+	banReason = kv->GetString("reason", banReason.c_str());
+}
+
 void NameBannerPlugin::CleanupRuntime()
 {
-	hooks::Cleanup();
-	nameChanger.Unload();
-	if (convarsRegistered)
-	{
-		ConVar_Unregister();
-		convarsRegistered = false;
-	}
+	CleanupHooks();
 	utils::Cleanup();
 	loaded = false;
 }
 
 bool NameBannerPlugin::Unload(char *error, size_t maxlen)
 {
-	if (!hooks::Cleanup())
+	if (!CleanupHooks())
 	{
 		const char *reason = "NameBanner could not unload because one of its server hooks could not be removed safely.";
 		if (error && maxlen)
@@ -202,7 +374,6 @@ bool NameBannerPlugin::Unload(char *error, size_t maxlen)
 		return false;
 	}
 	CleanupRuntime();
-	settings::Shutdown();
 	Msg("[NameBanner] NameBanner unloaded successfully.\n");
 	return true;
 }
@@ -227,29 +398,81 @@ bool NameBannerPlugin::Unpause(char *error, size_t maxlen)
 	return false;
 }
 
+// -- Name-change detection --------------------------------------------------
+
 void NameBannerPlugin::OnClientFullyConnect(CPlayerSlot slot)
 {
-	nameChanger.OnClientReady(g_pPlayerManager->ToPlayer(slot));
+	auto *player = PlayerFromSlot(slot);
+	if (!IsEligibleHuman(player) || !player->IsInGame())
+	{
+		return;
+	}
+	auto &data = playerData[player->index];
+	data = {};
+	const char *name = player->GetName();
+	if (name)
+	{
+		data.lastName = name;
+		data.initialized = true;
+	}
 }
 
 void NameBannerPlugin::OnClientSettingsChanged(CPlayerSlot slot)
 {
-	nameChanger.OnClientSettingsChanged(g_pPlayerManager->ToPlayer(slot));
+	auto *player = PlayerFromSlot(slot);
+	if (!IsEligibleHuman(player) || !player->IsInGame())
+	{
+		return;
+	}
+	const char *currentName = player->GetName();
+	if (!currentName)
+	{
+		return;
+	}
+
+	auto &data = playerData[player->index];
+	if (!data.initialized)
+	{
+		data.lastName = currentName;
+		data.initialized = true;
+		return;
+	}
+	if (data.lastName == currentName)
+	{
+		return;
+	}
+	data.lastName = currentName;
+
+	const auto now = Clock::now();
+	const auto window = std::chrono::duration_cast<Clock::duration>(std::chrono::duration<float>(windowSeconds));
+	while (!data.changes.empty() && now - data.changes.front() >= window)
+	{
+		data.changes.pop_front();
+	}
+	data.changes.push_back(now);
+
+	const std::size_t threshold_ = static_cast<std::size_t>((std::max)(1, threshold));
+	if (data.changes.size() >= threshold_)
+	{
+		const std::size_t changes = data.changes.size();
+		data.changes.clear();
+		BanForNameChanging(player, changes);
+	}
 }
 
 void NameBannerPlugin::OnClientDisconnect(CPlayerSlot slot)
 {
-	auto *player = g_pPlayerManager->ToPlayer(slot);
-	nameChanger.OnClientDisconnect(player);
+	auto *player = PlayerFromSlot(slot);
 	if (player && player->index >= 1 && player->index <= MAXPLAYERS)
 	{
+		playerData[player->index] = {};
 		alreadyBanned[player->index] = false;
 	}
 }
 
 void NameBannerPlugin::BanForNameChanging(Player *player, std::size_t changes)
 {
-	if (!player || player->index < 1 || player->index > MAXPLAYERS || !interfaces::pEngine)
+	if (!player || player->index < 1 || player->index > MAXPLAYERS || !g_pAdmin)
 	{
 		return;
 	}
@@ -259,28 +482,10 @@ void NameBannerPlugin::BanForNameChanging(Player *player, std::size_t changes)
 	}
 
 	const std::string playerName = player->GetName();
-	const std::uint64_t steamId = player->GetSteamId64(false);
-	if (!steamId)
-	{
-		Msg("[NameBanner] %s changed names %zu times but has no SteamID64 yet; skipping the ban.\n", playerName.c_str(), changes);
-		return;
-	}
+	std::string reason = banReason;
+	ReplaceAll(reason, "{changes}", std::to_string(changes));
 
-	const char *commandTemplate = settings::GetBanCommand();
-	if (!commandTemplate || !*commandTemplate)
-	{
-		Msg("[NameBanner] %s changed names %zu times but nb_ban_command is empty; no ban was sent.\n", playerName.c_str(), changes);
-		return;
-	}
-
-	const int userId = interfaces::pEngine->GetPlayerUserId(player->GetPlayerSlot()).Get();
-	std::string command = commandTemplate;
-	ReplaceAll(command, "{steamid64}", std::to_string(steamId));
-	ReplaceAll(command, "{userid}", std::to_string(userId));
-	ReplaceAll(command, "{changes}", std::to_string(changes));
-	command.push_back('\n');
-	interfaces::pEngine->ServerCommand(command.c_str());
+	g_pAdmin->AddPlayerPunishment(player->GetPlayerSlot().Get(), RT_BAN, banMinutes, reason.c_str());
 	alreadyBanned[player->index] = true;
-	Msg("[NameBanner] Banned %s (SteamID64 %llu) for changing names %zu times within the rolling window.\n", playerName.c_str(),
-		static_cast<unsigned long long>(steamId), changes);
+	Msg("[NameBanner] Banned %s for changing names %zu times within the rolling window.\n", playerName.c_str(), changes);
 }
