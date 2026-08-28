@@ -140,6 +140,10 @@ bool NameBannerPlugin::Activate(char *error, size_t maxlen, bool late)
 	ConVar_Register();
 	convarsRegistered = true;
 	nameChanger.Load(BanCallback);
+	if (interfaces::pEngine)
+	{
+		interfaces::pEngine->ServerCommand("exec namebanner.cfg\n");
+	}
 
 	if (!hooks::Initialize(missing))
 	{
