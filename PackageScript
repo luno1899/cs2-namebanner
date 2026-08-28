@@ -1,0 +1,39 @@
+# vim: set sts=2 ts=8 sw=2 tw=99 et ft=python:
+import os
+
+
+builder.SetBuildFolder('package')
+
+if len(MMSPlugin.binaries) != 1:
+  raise Exception('NameBanner must produce exactly one plugin binary.')
+
+cxx = MMSPlugin.sdk_target.cxx
+platform_folder = {
+  'windows': 'win64',
+  'linux': 'linuxsteamrt64',
+}[cxx.target.platform]
+
+addons_root = os.path.join('game', 'csgo', 'addons')
+plugin_root = os.path.join(addons_root, 'namebanner')
+bin_path = os.path.join(plugin_root, 'bin', platform_folder)
+metamod_path = os.path.join(addons_root, 'metamod')
+gamedata_path = os.path.join(plugin_root, 'gamedata')
+builder.AddFolder(bin_path)
+builder.AddFolder(metamod_path)
+gamedata_folder = builder.AddFolder(gamedata_path)
+
+task = MMSPlugin.binaries[0]
+extension = os.path.splitext(os.path.basename(task.binary.path))[1]
+builder.AddCopy(task.binary, os.path.join(bin_path, 'namebanner' + extension))
+builder.AddCopy(
+  os.path.join(builder.sourcePath, 'gamedata', 'namebanner.games.txt'),
+  gamedata_folder
+)
+
+vdf = '''"Metamod Plugin"
+{{
+\t"alias"\t"namebanner"
+\t"file"\t"addons/namebanner/bin/{}/namebanner"
+}}
+'''.format(platform_folder)
+builder.AddOutputFile(os.path.join(metamod_path, 'namebanner.vdf'), vdf.encode('utf-8'))

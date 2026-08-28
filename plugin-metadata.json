@@ -1,0 +1,11 @@
+{
+  "name": "namebanner",
+  "alias": "namebanner",
+  "display_name": "NameBanner",
+  "description": "Bans players who change their visible name too many times in a short window.",
+  "author": "You",
+  "url": "",
+  "log_tag": "NAMEBANNER",
+  "license": "AGPL-3.0",
+  "version": "1.0.0"
+}
