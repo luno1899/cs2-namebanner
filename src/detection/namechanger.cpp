@@ -77,7 +77,7 @@ namespace detection
 		}
 		data.changes.push_back(now);
 
-		const std::size_t threshold = static_cast<std::size_t>(std::max(1, settings::GetNameChangeThreshold()));
+		const std::size_t threshold = static_cast<std::size_t>((std::max)(1, settings::GetNameChangeThreshold()));
 		if (data.changes.size() >= threshold)
 		{
 			const std::size_t changes = data.changes.size();
