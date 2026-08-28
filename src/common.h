@@ -39,6 +39,9 @@
 
 PLUGIN_GLOBALVARS();
 
+// For searchability, because static behaves differently in different scopes.
+#define static_persist static // static local variables
+
 typedef int8 i8;
 typedef int16 i16;
 typedef int32 i32;
