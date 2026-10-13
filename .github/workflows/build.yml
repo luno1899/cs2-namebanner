@@ -1,0 +1,47 @@
+name: Build
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # Metamod:Source 2.0.0-dev+1411 (plugin API 17:14, SourceHook 5:5, no KHook) - do not move to API 18.
+  METAMOD_COMMIT: 7ec0f16948ab3a0910a98b4ac10e1c0e360d5339
+  # Last alliedmodders/hl2sdk cs2 commit before 2025-10-18.
+  HL2SDK_COMMIT: 84a823db042b49d2f6934b770dafbf3a366cef26
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Pin Metamod:Source and HL2SDK
+        run: |
+          git -C metamod-source fetch --depth=1 origin "$METAMOD_COMMIT"
+          git -C metamod-source checkout --detach "$METAMOD_COMMIT"
+          git -C hl2sdk-cs2 fetch --depth=1 origin "$HL2SDK_COMMIT"
+          git -C hl2sdk-cs2 checkout --detach "$HL2SDK_COMMIT"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build Linux SteamRT3 x64
+        run: |
+          set -o pipefail
+          if ! ./build-linux.sh build-linux-ci 2>&1 | tee build.log; then
+            # Surface compiler/linker errors as one annotation so they are readable without downloading the raw log.
+            msg=$(grep -E 'error:|undefined reference|Build failed|fatal error' build.log | grep -v 'warning' | head -40 | sed 's/%/%25/g' | paste -sd '|' - | sed 's/|/%0A/g')
+            echo "::error title=Linux build errors::${msg}"
+            exit 1
+          fi
+      - name: Package Linux x64
+        run: cd build-linux-ci/package && zip -qr ../../namebanner-linux-x64.zip game
+      - uses: actions/upload-artifact@v4
+        with:
+          name: namebanner-linux-x64
+          path: namebanner-linux-x64.zip
+          if-no-files-found: error

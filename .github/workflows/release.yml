@@ -1,0 +1,77 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to create (for example v1.0.1)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  # Metamod:Source 2.0.0-dev+1411 (plugin API 17:14, SourceHook 5:5, no KHook) - do not move to API 18.
+  METAMOD_COMMIT: 7ec0f16948ab3a0910a98b4ac10e1c0e360d5339
+  # Last alliedmodders/hl2sdk cs2 commit before 2025-10-18.
+  HL2SDK_COMMIT: 84a823db042b49d2f6934b770dafbf3a366cef26
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Pin Metamod:Source and HL2SDK
+        run: |
+          git -C metamod-source fetch --depth=1 origin "$METAMOD_COMMIT"
+          git -C metamod-source checkout --detach "$METAMOD_COMMIT"
+          git -C hl2sdk-cs2 fetch --depth=1 origin "$HL2SDK_COMMIT"
+          git -C hl2sdk-cs2 checkout --detach "$HL2SDK_COMMIT"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build Linux SteamRT3 x64
+        run: ./build-linux.sh build-linux-release
+      - name: Stage release layout
+        run: |
+          pkg=build-linux-release/package/game/csgo/addons
+          mkdir -p stage/addons/namebanner stage/addons/metamod stage/addons/configs/NameBanner
+          cp "$pkg/namebanner/bin/linuxsteamrt64/namebanner.so" stage/addons/namebanner/namebanner.so
+          cp configs/NameBanner/settings.ini stage/addons/configs/NameBanner/
+          printf '"Metamod Plugin"\n{\n\t"alias"\t"namebanner"\n\t"file"\t"addons/namebanner/namebanner"\n}\n' > stage/addons/metamod/namebanner.vdf
+      - name: Reject unresolved StringToken symbols
+        run: |
+          if readelf --dyn-syms --wide stage/addons/namebanner/namebanner.so | awk '$7 == "UND"' | grep -E 'g_bUpdateStringTokenDatabase|RegisterStringToken|MurmurHash2LowerCase'; then
+            echo "namebanner.so still imports symbols the game no longer exports" >&2
+            exit 1
+          fi
+      - name: Zip
+        run: cd stage && zip -qr ../namebanner-linux-x64.zip addons
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          cat > notes.md <<'NOTES'
+          ## Fix: plugin failed to load after the game update
+
+          `meta load` reported `undefined symbol: g_bUpdateStringTokenDatabase`. The updated `libtier0.so` no longer
+          exports that variable (or `RegisterStringToken`), but the SDK's inline `CUtlStringToken` code still references them.
+
+          - Added local definitions of `g_bUpdateStringTokenDatabase` and `RegisterStringToken` (if the game exports them, its versions are used).
+          - Added a local `MurmurHash2LowerCase(const char*, int, uint32)` (same algorithm as the SDK), which the game no longer exports either
+            (`undefined symbol: _Z20MurmurHash2LowerCasePKcij`).
+          - Build is pinned to Metamod:Source `7ec0f16` (2.0.0-dev+1411, plugin API 17:14, SourceHook 5:5, no KHook) and
+            alliedmodders/hl2sdk `cs2` at `84a823d` (last commit before 2025-10-18). Do not load it on Metamod with API 18.
+          - Build tolerates SDK revisions that do not ship `source2_steam_stats.proto`.
+          - Release layout is now `addons/namebanner/namebanner.so` + `addons/metamod/namebanner.vdf`.
+
+          Linux x86_64 only. Requires Pisex Admin System (IAdminApi) on the server.
+          NOTES
+          gh release create "$TAG" namebanner-linux-x64.zip --title "$TAG" --notes-file notes.md --target "$GITHUB_SHA"
