@@ -58,20 +58,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag || github.ref_name }}
         run: |
-          cat > notes.md <<'NOTES'
-          ## Fix: plugin failed to load after the game update
-
-          `meta load` reported `undefined symbol: g_bUpdateStringTokenDatabase`. The updated `libtier0.so` no longer
-          exports that variable (or `RegisterStringToken`), but the SDK's inline `CUtlStringToken` code still references them.
-
-          - Added local definitions of `g_bUpdateStringTokenDatabase` and `RegisterStringToken` (if the game exports them, its versions are used).
-          - Added a local `MurmurHash2LowerCase(const char*, int, uint32)` (same algorithm as the SDK), which the game no longer exports either
-            (`undefined symbol: _Z20MurmurHash2LowerCasePKcij`).
-          - Build is pinned to Metamod:Source `7ec0f16` (2.0.0-dev+1411, plugin API 17:14, SourceHook 5:5, no KHook) and
-            alliedmodders/hl2sdk `cs2` at `84a823d` (last commit before 2025-10-18). Do not load it on Metamod with API 18.
-          - Build tolerates SDK revisions that do not ship `source2_steam_stats.proto`.
-          - Release layout is now `addons/namebanner/namebanner.so` + `addons/metamod/namebanner.vdf`.
-
-          Linux x86_64 only. Requires Pisex Admin System (IAdminApi) on the server.
-          NOTES
-          gh release create "$TAG" namebanner-linux-x64.zip --title "$TAG" --notes-file notes.md --target "$GITHUB_SHA"
+          version="${TAG#v}"
+          {
+            echo "Bans players who change their name too often (default: 10 changes in 20 seconds, permanent ban)."
+            echo "The ban is written through Pisex Admin System into its MySQL table."
+            echo
+            echo "## Requirements"
+            echo "- Linux x86_64 CS2 server, Metamod:Source 2.0.0-dev+1411 (plugin API 17:14; do not use API 18)"
+            echo "- [Utils (cs2-menus)](https://github.com/Pisex/cs2-menus/releases) **1.9.1 or newer**"
+            echo "- [Admin System](https://github.com/Pisex/cs2-admin_system/releases) with sql_mm and a configured MySQL database"
+            echo
+            echo "## Install"
+            echo "Unzip \`namebanner-linux-x64.zip\` into \`game/csgo/\`, edit \`addons/configs/NameBanner/settings.ini\`, then restart the server or run \`meta load addons/namebanner/namebanner\`."
+            echo
+            echo "## Changes"
+            awk -v v="$version" '$0 == "## " v {f=1; next} /^## / {f=0} f' CHANGELOG.md
+          } > notes.md
+          gh release create "$TAG" namebanner-linux-x64.zip --title "NameBanner $version" --notes-file notes.md --target "$GITHUB_SHA"
