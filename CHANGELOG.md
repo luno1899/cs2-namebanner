@@ -6,7 +6,7 @@
 - Kept Metamod:Source pinned to `7ec0f16` (2.0.0-dev+1411, plugin API 17:14, SourceHook 5:5).
 - Updated the vendored Pisex Utils interface to cs2-menus 1.9.2 (`cc4a9c3`).
 - Updated the vendored Admin System interface to its current layout.
-- Removed obsolete protobuf generation and duplicate manual SDK libraries; NameBanner does not include protobuf messages.
+- Updated protobuf generation for the current SDK and removed duplicate manual SDK libraries.
 
 ## 1.0.1
 
