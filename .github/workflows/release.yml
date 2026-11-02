@@ -17,8 +17,8 @@ permissions:
 env:
   # Metamod:Source 2.0.0-dev+1411 (plugin API 17:14, SourceHook 5:5, no KHook) - do not move to API 18.
   METAMOD_COMMIT: 7ec0f16948ab3a0910a98b4ac10e1c0e360d5339
-  # Last alliedmodders/hl2sdk cs2 commit before 2025-10-18.
-  HL2SDK_COMMIT: 84a823db042b49d2f6934b770dafbf3a366cef26
+  # Current alliedmodders/hl2sdk cs2 revision used by Utils 1.9.2-compatible builds.
+  HL2SDK_COMMIT: 3f4110dce3060b352d49bf100f1a43f7705aab06
 
 jobs:
   linux:
@@ -65,7 +65,7 @@ jobs:
             echo
             echo "## Requirements"
             echo "- Linux x86_64 CS2 server, Metamod:Source 2.0.0-dev+1411 (plugin API 17:14; do not use API 18)"
-            echo "- [Utils (cs2-menus)](https://github.com/Pisex/cs2-menus/releases) **1.9.1 or newer**"
+            echo "- [Utils (cs2-menus)](https://github.com/Pisex/cs2-menus/releases) **1.9.2 or newer**"
             echo "- [Admin System](https://github.com/Pisex/cs2-admin_system/releases) with sql_mm and a configured MySQL database"
             echo
             echo "## Install"

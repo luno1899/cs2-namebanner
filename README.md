@@ -20,8 +20,8 @@ NameBanner не проверяет иммунитет и не делает ис�
 | Что | Зачем |
 |---|---|
 | Linux x86_64 сервер CS2 | релиз собирается только под Linux (Steam Runtime) |
-| Metamod:Source 2.0.0-dev+1411 (plugin API 17:14) | сборка закреплена на этой версии, на Metamod с API 18 не загружать |
-| [Utils](https://github.com/Pisex/cs2-menus/releases) **1.9.1 или новее** | события игроков (`IPlayerListener`); на старых версиях Utils плагин работать не будет |
+| Metamod:Source 2.0.0-dev+1411 (plugin API 17:14, SourceHook 5:5) | сборка закреплена на build 1411, на Metamod с API 18 не загружать |
+| [Utils](https://github.com/Pisex/cs2-menus/releases) **1.9.2** | актуальный интерфейс событий игроков (`IPlayerListener`) |
 | [Admin System](https://github.com/Pisex/cs2-admin_system/releases) + [sql_mm](https://github.com/zer0k-z/sql_mm/releases) и настроенная MySQL | хранение банов |
 
 Если Utils или Admin System не загружены, плагин напишет об этом в консоль красным и выгрузит сам себя.
@@ -36,7 +36,7 @@ NameBanner не проверяет иммунитет и не делает ис�
    addons/configs/NameBanner/settings.ini
    ```
 3. Перезапустите сервер или выполните `meta load addons/namebanner/namebanner`.
-4. Проверьте `meta list`: должна быть строка `NameBanner (1.0.1) by luno`. В консоли при старте будет `[NameBanner] 1.0.1 loaded` и `Listener registered`.
+4. Проверьте `meta list`: должна быть строка `NameBanner (1.0.2) by luno`. В консоли при старте будет `[NameBanner] 1.0.2 loaded` и `Listener registered`.
 
 ## Настройка
 
@@ -70,4 +70,4 @@ AGPL-3.0, см. [LICENSE](LICENSE). Заголовки `src/include/admin.h` и 
 
 ## English
 
-NameBanner is a Metamod:Source plugin for CS2 that bans players who change their name too often (default: 10 changes in 20 seconds, permanent ban). It receives player events from the [Utils](https://github.com/Pisex/cs2-menus) plugin (1.9.1+) and stores bans through [Admin System](https://github.com/Pisex/cs2-admin_system)'s MySQL table, so both plugins (plus sql_mm and a configured database) are required. Linux x86_64 only, built against Metamod:Source 2.0.0-dev+1411 (API 17:14). Unzip the release into `game/csgo/` and edit `addons/configs/NameBanner/settings.ini`.
+NameBanner is a Metamod:Source plugin for CS2 that bans players who change their name too often (default: 10 changes in 20 seconds, permanent ban). It receives player events from [Utils](https://github.com/Pisex/cs2-menus) 1.9.2 and stores bans through [Admin System](https://github.com/Pisex/cs2-admin_system)'s MySQL table, so both plugins (plus sql_mm and a configured database) are required. Linux x86_64 only, built with the current CS2 HL2SDK against Metamod:Source 2.0.0-dev+1411 (API 17:14, SourceHook 5:5). Unzip the release into `game/csgo/` and edit `addons/configs/NameBanner/settings.ini`.

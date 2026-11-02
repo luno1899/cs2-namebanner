@@ -90,6 +90,9 @@ class MMSPluginConfig(object):
   def configureCXX(self, cxx):
     if cxx.target.platform == 'linux':
       cxx.defines += [
+        'bswap_16=__builtin_bswap16',
+        'bswap_32=__builtin_bswap32',
+        'bswap_64=__builtin_bswap64',
         'stricmp=strcasecmp',
         '_stricmp=strcasecmp',
         '_snprintf=snprintf',
@@ -124,6 +127,7 @@ class MMSPluginConfig(object):
         '-Wno-overloaded-virtual',
         '-Wno-register',
         '-Wno-invalid-offsetof',
+        '-Wno-reorder-ctor',
         '-Wno-parentheses',
       ]
       cxx.linkflags += ['-fuse-ld=lld', '-Wl,--no-gnu-unique', '-static-libstdc++', '-lgcc_eh']

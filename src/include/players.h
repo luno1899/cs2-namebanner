@@ -5,6 +5,7 @@
 #include <vector>
 
 class CBaseEntity;
+class CEntityIndex;
 class CSteamID;
 class CTakeDamageInfo;
 class IGameEventListener2;
@@ -100,4 +101,10 @@ public:
     virtual void SetConVars(std::vector<int> vPlayers, std::vector<FakeConVar> cvars) = 0;
 
     virtual void AddListener(SourceMM::PluginId id, IPlayerListener* pListener) = 0;
+
+    // SteamID игрока в формате STEAM_1:X:Y (как в Levels Ranks / SourceMod).
+    // bRequireAuth = false - до прохождения Steam авторизации берётся SteamID из подключения.
+    virtual std::string GetSteamID2(int iSlot, bool bRequireAuth = false) = 0;
+    // Конвертация SteamID64 -> STEAM_1:X:Y. Пустая строка, если SteamID некорректный.
+    virtual std::string SteamID64ToSteamID2(uint64 iSteamID64) = 0;
 };

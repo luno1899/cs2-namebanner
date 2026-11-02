@@ -17,7 +17,6 @@
 
 #include "const.h"
 #include "vector.h"
-#include "entity2/entitysystem.h"
 #include "tier0/dbg.h"
 
 #define MAXPLAYERS 64

@@ -27,6 +27,12 @@ typedef std::function<void(int iSlot, const char* szAction, const char* szParam)
 typedef std::function<bool(int iSlot, int iType, int iTime, const char* szReason, int iAdminID)> OnPlayerPunishCallbackPre;
 typedef std::function<bool(const char* szSteamID64, const char* szName, int iType, int iTime, const char* szReason, int iAdminID)> OnOfflinePlayerPunishCallbackPre;
 
+struct AdminMenuEntry
+{
+    std::string szIdentity;
+    std::string szName;
+};
+
 #define Admin_INTERFACE "IAdminApi"
 
 class IAdminApi
@@ -82,4 +88,7 @@ public:
     virtual int GetAdminGroupID(int iSlot) = 0;
     virtual const char* GetAdminGroupName(int iSlot) = 0;
     virtual int GetImmunityType() = 0;
+
+    virtual std::vector<AdminMenuEntry> GetAdminMenuCategories(int iSlot) = 0;
+    virtual std::vector<AdminMenuEntry> GetAdminMenuItems(int iSlot, const char* szCategory) = 0;
 };

@@ -53,7 +53,7 @@ void NameBanner::AllPluginsLoaded()
 	g_pPlayers = static_cast<IPlayersApi *>(g_SMAPI->MetaFactory(PLAYERS_INTERFACE, &ret, nullptr));
 	if (ret == META_IFACE_FAILED || !g_pPlayers)
 	{
-		fail("Missing Utils plugin (Pisex/cs2-menus 1.9.1 or newer).");
+		fail("Missing Utils plugin (Pisex/cs2-menus 1.9.2 or newer).");
 		return;
 	}
 
@@ -89,7 +89,8 @@ void NameBanner::LoadConfig()
 	windowSeconds = kv->GetFloat("window_seconds", windowSeconds);
 	banMinutes = kv->GetInt("ban_minutes", banMinutes);
 	banReason = kv->GetString("reason", banReason.c_str());
-	debug = kv->GetBool("debug", debug);}
+	debug = kv->GetBool("debug", debug);
+}
 
 bool NameBanner::IsEligible(int slot) const
 {
