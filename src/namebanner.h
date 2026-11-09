@@ -22,8 +22,10 @@ public:
 
 	// IPlayerListener (dispatched by the Utils plugin).
 	void ClientFullyConnect(int slot) override;
-	void ClientSettingsChanged(int slot) override;
 	void ClientDisconnect(int slot) override;
+
+	// Called by NameBanner's own post-hook, after the engine applied new userinfo.
+	void OnClientSettingsChanged(int slot);
 
 	const char *GetAuthor() override
 	{

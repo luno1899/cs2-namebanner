@@ -8,8 +8,18 @@ NameBanner g_NameBanner;
 PLUGIN_EXPOSE(NameBanner, g_NameBanner);
 
 static IVEngineServer2 *g_pEngine = nullptr;
+static IServerGameClients *g_pGameClients = nullptr;
 static IPlayersApi *g_pPlayers = nullptr;
 static IAdminApi *g_pAdmin = nullptr;
+static int g_settingsChangedHookId = 0;
+
+SH_DECL_HOOK1_void(IServerGameClients, ClientSettingsChanged, SH_NOATTRIB, false, CPlayerSlot);
+
+static void HookClientSettingsChangedPost(CPlayerSlot slot)
+{
+	g_NameBanner.OnClientSettingsChanged(slot.Get());
+	RETURN_META(MRES_IGNORED);
+}
 
 static void ReplaceAll(std::string &value, const std::string &placeholder, const std::string &replacement)
 {
@@ -25,12 +35,18 @@ bool NameBanner::Load(PluginId id, ISmmAPI *ismm, char *error, size_t maxlen, bo
 
 	GET_V_IFACE_CURRENT(GetEngineFactory, g_pEngine, IVEngineServer2, SOURCE2ENGINETOSERVER_INTERFACE_VERSION);
 	GET_V_IFACE_CURRENT(GetFileSystemFactory, g_pFullFileSystem, IFileSystem, FILESYSTEM_INTERFACE_VERSION);
+	GET_V_IFACE_CURRENT(GetServerFactory, g_pGameClients, IServerGameClients, INTERFACEVERSION_SERVERGAMECLIENTS);
 	Msg("[NameBanner] %s loaded (late=%d), waiting for the other plugins.\n", PLUGIN_FULL_VERSION, late ? 1 : 0);
 	return true;
 }
 
 bool NameBanner::Unload(char *error, size_t maxlen)
 {
+	if (g_settingsChangedHookId)
+	{
+		SH_REMOVE_HOOK_ID(g_settingsChangedHookId);
+		g_settingsChangedHookId = 0;
+	}
 	// Utils drops our IPlayerListener on its own when Metamod unloads this plugin.
 	return true;
 }
@@ -68,7 +84,14 @@ void NameBanner::AllPluginsLoaded()
 		g_pAdmin->GetPluginVersion(), static_cast<void *>(g_pAdmin));
 	Msg("[NameBanner] Config: threshold=%d window=%.0fs ban_minutes=%d debug=%d\n", threshold, windowSeconds, banMinutes, debug ? 1 : 0);
 	g_pPlayers->AddListener(g_PLID, this);
-	Msg("[NameBanner] Listener registered.\n");
+	g_settingsChangedHookId = SH_ADD_HOOK(IServerGameClients, ClientSettingsChanged, g_pGameClients,
+		SH_STATIC(HookClientSettingsChangedPost), true);
+	if (!g_settingsChangedHookId)
+	{
+		fail("Could not install the post ClientSettingsChanged hook.");
+		return;
+	}
+	Msg("[NameBanner] Utils listener and post ClientSettingsChanged hook registered.\n");
 
 	// Players who were already connected when the plugin loaded.
 	for (int slot = 0; slot < MAXPLAYERS; ++slot)
@@ -97,8 +120,7 @@ bool NameBanner::IsEligible(int slot) const
 	return slot >= 0 && slot < MAXPLAYERS && g_pPlayers && g_pPlayers->IsInGame(slot) && !g_pPlayers->IsFakeClient(slot);
 }
 
-// The engine updates the client's "name" userinfo before it calls ClientSettingsChanged, so this is
-// already the new name inside the callback (the controller's m_iszPlayerName is not).
+// This is called from a post-hook, so the engine has already applied the new userinfo.
 const char *NameBanner::ClientName(int slot) const
 {
 	return g_pEngine ? g_pEngine->GetClientConVarValue(CPlayerSlot(slot), "name") : nullptr;
@@ -144,14 +166,14 @@ void NameBanner::ClientDisconnect(int slot)
 	}
 }
 
-void NameBanner::ClientSettingsChanged(int slot)
+void NameBanner::OnClientSettingsChanged(int slot)
 {
-	if (debug)
-	{
-		Msg("[NameBanner] ClientSettingsChanged slot %d (eligible=%d)\n", slot, IsEligible(slot) ? 1 : 0);
-	}
 	if (!IsEligible(slot))
 	{
+		if (debug)
+		{
+			Msg("[NameBanner] ClientSettingsChanged post slot %d ignored (not eligible)\n", slot);
+		}
 		return;
 	}
 	const char *name = ClientName(slot);
@@ -171,6 +193,7 @@ void NameBanner::ClientSettingsChanged(int slot)
 	{
 		return;
 	}
+	const std::string previousName = data.lastName;
 	data.lastName = name;
 
 	const auto now = std::chrono::steady_clock::now();
@@ -180,6 +203,11 @@ void NameBanner::ClientSettingsChanged(int slot)
 		data.changes.pop_front();
 	}
 	data.changes.push_back(now);
+	if (debug)
+	{
+		Msg("[NameBanner] slot %d name changed '%s' -> '%s'; count=%zu/%d within %.0fs\n", slot,
+			previousName.c_str(), name, data.changes.size(), (std::max)(1, threshold), windowSeconds);
+	}
 
 	if (data.changes.size() >= static_cast<size_t>((std::max)(1, threshold)))
 	{
@@ -200,6 +228,9 @@ void NameBanner::Ban(int slot, const char *name, size_t changes)
 
 	std::string reason = banReason;
 	ReplaceAll(reason, "{changes}", std::to_string(changes));
+	Msg("[NameBanner] Threshold reached for %s: %zu changes within %.0f seconds; sending ban to Admin System.\n",
+		name, changes, windowSeconds);
 	g_pAdmin->AddPlayerPunishment(slot, RT_BAN, banMinutes, reason.c_str());
-	Msg("[NameBanner] Banned %s for changing names %zu times within %.0f seconds.\n", name, changes, windowSeconds);
+	Msg("[NameBanner] Admin System accepted the ban request for %s (minutes=%d, reason='%s').\n", name, banMinutes,
+		reason.c_str());
 }

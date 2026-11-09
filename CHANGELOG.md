@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.3
+
+- Fixed missed bans when the player changed their name exactly `threshold` times.
+- Utils dispatches `ClientSettingsChanged` before the engine applies userinfo; NameBanner now reads the name from its own Metamod 1411 SourceHook post-hook.
+- Debug logging now prints old/new names and the rolling counter.
+- Ban logging now distinguishes threshold detection from the Admin System request.
+
 ## 1.0.2
 
 - Updated alliedmodders/hl2sdk `cs2` from `84a823d` to `3f4110d`.
