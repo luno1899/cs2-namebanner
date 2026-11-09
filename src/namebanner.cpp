@@ -231,6 +231,6 @@ void NameBanner::Ban(int slot, const char *name, size_t changes)
 	Msg("[NameBanner] Threshold reached for %s: %zu changes within %.0f seconds; sending ban to Admin System.\n",
 		name, changes, windowSeconds);
 	g_pAdmin->AddPlayerPunishment(slot, RT_BAN, banMinutes, reason.c_str());
-	Msg("[NameBanner] Admin System accepted the ban request for %s (minutes=%d, reason='%s').\n", name, banMinutes,
+	Msg("[NameBanner] Ban request sent to Admin System for %s (minutes=%d, reason='%s').\n", name, banMinutes,
 		reason.c_str());
 }
